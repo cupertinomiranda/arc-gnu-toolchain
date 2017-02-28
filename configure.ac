@@ -1,4 +1,4 @@
-AC_INIT(riscv-toolchain, 1.0)
+AC_INIT(arc-toolchain, 1.0)
 
 AC_PROG_CC
 AC_PROG_FGREP
@@ -57,33 +57,14 @@ AC_ARG_ENABLE(atomic,
 	[enable_atomic=yes]
 	)
 
-AC_ARG_WITH(arch,
-	[AS_HELP_STRING([--with-arch=rv64imafdc],
-		[Sets the base RISC-V ISA, defaults to rv64imafdc])],
+AC_ARG_WITH(cpu,
+	[AS_HELP_STRING([--with-cpu=archs],
+		[Sets the base ARC ISA, defaults to archs])],
 	[],
-	[with_arch=rv64imafdc]
+	[with_cpu=archs]
 	)
 
-AC_ARG_WITH(abi,
-	[AS_HELP_STRING([--with-abi=lp64d],
-		[Sets the base RISC-V ABI, defaults to lp64d])],
-	[],
-	[with_abi=default]
-	)
-
-AS_IF([test "x$with_abi" == xdefault],
-	[AS_CASE([$with_arch],
-		[*rv64g* | *rv64*d*], [with_abi=lp64d],
-		[*rv64*f*], [with_abi=lp64f],
-		[*rv64*], [with_abi=lp64],
-		[*rv32g* | *rv32*d*], [with_abi=ilp32d],
-		[*rv32*f*], [with_abi=ilp32f],
-		[*rv32*], [with_abi=ilp32],
-		[AC_MSG_ERROR([Unknown arch])]
-	)])
-
-AC_SUBST(WITH_ARCH, --with-arch=$with_arch)
-AC_SUBST(WITH_ABI, --with-abi=$with_abi)
+AC_SUBST(WITH_CPU, --with-cpu=$with_cpu)
 
 AC_ARG_ENABLE(multilib,
 	[AS_HELP_STRING([--enable-multilib],

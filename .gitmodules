@@ -1,15 +1,15 @@
-[submodule "riscv-binutils-gdb"]
-	path = riscv-binutils-gdb
-	url = ../riscv-binutils-gdb.git
-[submodule "riscv-gcc"]
-	path = riscv-gcc
-	url = ../riscv-gcc.git
-[submodule "riscv-glibc"]
-	path = riscv-glibc
-	url = ../riscv-glibc.git
-[submodule "riscv-dejagnu"]
-	path = riscv-dejagnu
-	url = ../riscv-dejagnu.git
-[submodule "riscv-newlib"]
-	path = riscv-newlib
-	url = ../riscv-newlib.git
+[submodule "arc-binutils-gdb"]
+	path = arc-binutils-gdb
+	url = git@github.com:foss-for-synopsys-dwc-arc-processors/binutils-gdb.git
+	branch = binutils_glibc-dev
+[submodule "arc-gcc"]
+	path = arc-gcc
+	url = git@github.com:foss-for-synopsys-dwc-arc-processors/gcc.git
+	branch = arc-2016.09-release
+[submodule "arc-glibc"]
+	path = arc-glibc
+	url = git@github.com:foss-for-synopsys-dwc-arc-processors/glibc.git
+	branch = vineet-glibc-master
+[submodule "arc-buildroot"]
+	path = arc-buildroot
+	url = git@github.com:foss-for-synopsys-dwc-arc-processors/buildroot.git

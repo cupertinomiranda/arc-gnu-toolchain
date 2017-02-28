@@ -10,8 +10,7 @@ gcc_url := $(GNU_MIRROR)/gcc/gcc-$(gcc_version)/gcc-$(gcc_version).tar.gz
 glibc_url := $(GNU_MIRROR)/glibc/glibc-$(glibc_version).tar.gz
 newlib_url := ftp://sourceware.org/pub/newlib/newlib-$(newlib_version).tar.gz
 
-WITH_ARCH ?= @WITH_ARCH@
-WITH_ABI ?= @WITH_ABI@
+WITH_CPU ?= @WITH_CPU@
 SYSROOT := $(INSTALL_DIR)/sysroot
 
 SHELL := /bin/sh
@@ -35,24 +34,22 @@ MULTILIB_FLAGS := @multilib_flags@
 MULTILIB_NAMES := @multilib_names@
 GCC_CHECKING_FLAGS := @gcc_checking@
 
-XLEN := $(shell echo $(WITH_ARCH) | tr A-Z a-z | sed 's/.*rv\([0-9]*\).*/\1/')
-ifneq ($(XLEN),32)
-	XLEN := 64
-endif
+ENDIAN := ""
 
 ifeq ($(MULTILIB_NAMES),)
-	MULTILIB_NAMES := $(XLEN)
+	MULTILIB_NAMES := $(ENDIAN)
 endif
 
 CFLAGS_FOR_TARGET := $(CFLAGS_FOR_TARGET_EXTRA)
 ASFLAGS_FOR_TARGET := $(ASFLAGS_FOR_TARGET_EXTRA)
 GLIBC_TARGET_FLAGS := $(GLIBC_TARGET_FLAGS_EXTRA)
-GLIBC_CC_FOR_TARGET ?= riscv$(XLEN)-unknown-linux-gnu-gcc
-GLIBC_CXX_FOR_TARGET ?= riscv$(XLEN)-unknown-linux-gnu-g++
+GLIBC_CC_FOR_TARGET ?= arc$(ENDIAN)-unknown-linux-gnu-gcc
+GLIBC_CXX_FOR_TARGET ?= arc$(ENDIAN)-unknown-linux-gnu-g++
 
 all: @default_target@
 newlib: stamps/build-gcc-newlib
 linux: stamps/build-gcc-linux-stage2
+buildroot: stamps/build-buildroot
 
 $(addprefix src/original-,$(PACKAGES)):
 	mkdir -p src
@@ -76,11 +73,11 @@ $(addprefix $(srcdir)/patches/,$(PACKAGES)): $(srcdir)/patches/%: src/%
 
 patches: $(addprefix $(srcdir)/patches/,$(PACKAGES))
 
-stamps/build-binutils-linux: $(srcdir)/riscv-binutils-gdb
+stamps/build-binutils-linux: $(srcdir)/arc-binutils-gdb
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && $</configure \
-		--target=riscv$(XLEN)-unknown-linux-gnu \
+		--target=arc$(ENDIAN)-unknown-linux-gnu \
 		--prefix=$(INSTALL_DIR) \
 		--with-sysroot=$(SYSROOT) \
 		$(MULTILIB_FLAGS) \
@@ -93,26 +90,27 @@ stamps/build-binutils-linux: $(srcdir)/riscv-binutils-gdb
 stamps/build-linux-headers:
 	mkdir -p $(SYSROOT)/usr/
 	cp -a $(srcdir)/linux-headers/include $(SYSROOT)/usr/
+	#make ARCH=arc INSTALL_HDR_PATH=$SYSROOT/usr headers_install  #Maybe we need this instead of the copy.
 	mkdir -p $(dir $@) && touch $@
 
-stamps/build-glibc-linux-headers: $(srcdir)/riscv-glibc stamps/build-gcc-linux-stage1
+stamps/build-glibc-linux-headers: $(srcdir)/arc-glibc stamps/build-gcc-linux-stage1
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && CC="$(GLIBC_CC_FOR_TARGET)" $</configure \
-		--host=riscv$(XLEN)-unknown-linux-gnu \
+		--host=arc$(ENDIAN)-unknown-linux-gnu \
 		--prefix=$(SYSROOT)/usr \
 		--enable-shared \
 		--with-headers=$(srcdir)/linux-headers/include \
 		--disable-multilib \
 		--enable-kernel=3.0.0
-	$(MAKE) -C $(notdir $@) install-headers
+	$(MAKE) ARCH=arc -C $(notdir $@) install-headers
 	mkdir -p $(dir $@) && touch $@
 
-stamps/build-glibc-linux-%: $(srcdir)/riscv-glibc stamps/build-gcc-linux-stage1
+stamps/build-glibc-linux-%: $(srcdir)/arc-glibc stamps/build-gcc-linux-stage1
 	$(eval $@_ARCH := $(word 4,$(subst -, ,$@)))
 	$(eval $@_ABI := $(word 5,$(subst -, ,$@)))
 	$(eval $@_LIBDIRSUFFIX := $(if $($@_ABI),$(shell echo $($@_ARCH) | sed 's/.*rv\([0-9]*\).*/\1/')/$($@_ABI),))
-	$(eval $@_XLEN := $(if $($@_ABI),$(shell echo $($@_ARCH) | sed 's/.*rv\([0-9]*\).*/\1/'),$(XLEN)))
+	$(eval $@_ENDIAN := $(if $($@_ABI),$(shell echo $($@_ARCH) | sed 's/.*rv\([0-9]*\).*/\1/'),$(ENDIAN)))
 	$(eval $@_CFLAGS := $(if $($@_ABI),-march=$($@_ARCH) -mabi=$($@_ABI),))
 	$(eval $@_LIBDIROPTS := $(if $@_LIBDIRSUFFIX,--libdir=/usr/lib$($@_LIBDIRSUFFIX) libc_cv_slibdir=/lib$($@_LIBDIRSUFFIX) libc_cv_rtlddir=/lib,))
 	rm -rf $@ $(notdir $@)
@@ -122,7 +120,7 @@ stamps/build-glibc-linux-%: $(srcdir)/riscv-glibc stamps/build-gcc-linux-stage1
 		CFLAGS="$(CFLAGS_FOR_TARGET) -g -O2 $($@_CFLAGS)" \
 		ASFLAGS="$(ASFLAGS_FOR_TARGET) $($@_CFLAGS)" \
 		$</configure \
-		--host=riscv$($@_XLEN)-unknown-linux-gnu \
+		--host=arc$($@_ENDIAN)-unknown-linux-gnu \
 		--prefix=/usr \
 		--disable-werror \
 		--enable-shared \
@@ -135,12 +133,12 @@ stamps/build-glibc-linux-%: $(srcdir)/riscv-glibc stamps/build-gcc-linux-stage1
 	+flock $(SYSROOT)/.lock $(MAKE) -C $(notdir $@) install install_root=$(SYSROOT)
 	mkdir -p $(dir $@) && touch $@
 
-stamps/build-gcc-linux-stage1: $(srcdir)/riscv-gcc stamps/build-binutils-linux \
+stamps/build-gcc-linux-stage1: $(srcdir)/arc-gcc stamps/build-binutils-linux \
                                stamps/build-linux-headers
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && $</configure \
-		--target=riscv$(XLEN)-unknown-linux-gnu \
+		--target=arc$(ENDIAN)-unknown-linux-gnu \
 		--prefix=$(INSTALL_DIR) \
 		--with-sysroot=$(SYSROOT) \
 		--with-newlib \
@@ -159,26 +157,25 @@ stamps/build-gcc-linux-stage1: $(srcdir)/riscv-gcc stamps/build-binutils-linux \
 		--disable-bootstrap \
 		$(GCC_CHECKING_FLAGS) \
 		$(MULTILIB_FLAGS) \
-		$(WITH_ABI) \
-		$(WITH_ARCH)
+		$(WITH_CPU)
 	$(MAKE) -C $(notdir $@) inhibit-libc=true all-gcc
 	$(MAKE) -C $(notdir $@) inhibit-libc=true install-gcc
 	$(MAKE) -C $(notdir $@) inhibit-libc=true all-target-libgcc
 	$(MAKE) -C $(notdir $@) inhibit-libc=true install-target-libgcc
 	mkdir -p $(dir $@) && touch $@
 
-stamps/build-gcc-linux-stage2: $(srcdir)/riscv-gcc $(addprefix stamps/build-glibc-linux-,$(MULTILIB_NAMES)) \
+stamps/build-gcc-linux-stage2: $(srcdir)/arc-gcc $(addprefix stamps/build-glibc-linux-,$(MULTILIB_NAMES)) \
                                stamps/build-glibc-linux-headers
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && $</configure \
-		--target=riscv$(XLEN)-unknown-linux-gnu \
+		--target=arc$(ENDIAN)-unknown-linux-gnu \
 		--prefix=$(INSTALL_DIR) \
 		--with-sysroot=$(SYSROOT) \
 		--with-system-zlib \
 		--enable-shared \
 		--enable-tls \
-		--enable-languages=c,c++,fortran \
+		--enable-languages=c,c++ \
 		--disable-libmudflap \
 		--disable-libssp \
 		--disable-libquadmath \
@@ -186,29 +183,29 @@ stamps/build-gcc-linux-stage2: $(srcdir)/riscv-gcc $(addprefix stamps/build-glib
 		--disable-bootstrap \
 		$(GCC_CHECKING_FLAGS) \
 		$(MULTILIB_FLAGS) \
-		$(WITH_ABI) \
-		$(WITH_ARCH)
+		$(WITH_CPU)
+		#--enable-languages=c,c++,fortran \ 
 	$(MAKE) -C $(notdir $@)
 	$(MAKE) -C $(notdir $@) install
-	cp -a $(INSTALL_DIR)/riscv$(XLEN)-unknown-linux-gnu/lib* $(SYSROOT)
+	cp -a $(INSTALL_DIR)/arc$(ENDIAN)-unknown-linux-gnu/lib* $(SYSROOT)
 	mkdir -p $(dir $@) && touch $@
 
-stamps/build-binutils-newlib: $(srcdir)/riscv-binutils-gdb
+stamps/build-binutils-newlib: $(srcdir)/arc-binutils-gdb
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && $</configure \
-		--target=riscv$(XLEN)-unknown-elf \
+		--target=arc$(ENDIAN)-unknown-elf \
 		--prefix=$(INSTALL_DIR) \
 		--disable-werror
 	$(MAKE) -C $(notdir $@)
 	$(MAKE) -C $(notdir $@) install
 	mkdir -p $(dir $@) && touch $@
 
-src/newlib-gcc: $(srcdir)/riscv-gcc
+src/newlib-gcc: $(srcdir)/arc-gcc
 	rm -rf $@ $@.tmp
 	mkdir -p $(dir $@)
 	cp -a $< $@.tmp
-	cp -a $(srcdir)/riscv-newlib/. $@.tmp
+	cp -a $(srcdir)/arc-newlib/. $@.tmp
 	cp -a $</include/. $@.tmp/include
 	mv $@.tmp $@
 
@@ -218,7 +215,7 @@ stamps/build-gcc-newlib: src/newlib-gcc stamps/build-binutils-newlib
 	rm -rf $@ $(notdir $@)
 	mkdir $(notdir $@)
 	cd $(notdir $@) && $(CURDIR)/$</configure \
-		--target=riscv$(XLEN)-unknown-elf \
+		--target=arc$(ENDIAN)-unknown-elf \
 		--prefix=$(INSTALL_DIR) \
 		--without-headers \
 		--disable-shared \
@@ -234,26 +231,35 @@ stamps/build-gcc-newlib: src/newlib-gcc stamps/build-binutils-newlib
 		--disable-nls \
 		$(GCC_CHECKING_FLAGS) \
 		$(MULTILIB_FLAGS) \
-		$(WITH_ABI) \
-		$(WITH_ARCH)
+		$(WITH_CPU)
 	$(MAKE) -C $(notdir $@) inhibit-libc=true
 	$(MAKE) -C $(notdir $@) install
-	$(if $(findstring enable,$(MULTILIB_FLAGS)),rm -f $(INSTALL_DIR)/riscv$(XLEN)-unknown-elf/lib/*.*,)
+	$(if $(findstring enable,$(MULTILIB_FLAGS)),rm -f $(INSTALL_DIR)/arc$(ENDIAN)-unknown-elf/lib/*.*,)
 	mkdir -p $(dir $@) && touch $@
+
+stamps/build-buildroot: $(srcdir)/arc-buildroot stamps/build-gcc-linux-stage2
+	rm -rf $@ $(notdir $@)
+	mkdir $(notdir $@)
+	cd $(notdir $@) && $(MAKE) -C $(CURDIR)/$< O=`pwd` snps_axs103_defconfig
+	$(MAKE) -C $(nordir $@) menuconfig
+	$(MAKE) -C $(nordir $@)
+	mkdir -p $(dir $@) && touch $@
+
 
 .PHONY: check-gcc-newlib
 check-gcc-newlib: stamps/build-gcc-newlib
 	export PATH=$(INSTALL_DIR)/bin:$(PATH) && \
-	export DEJAGNULIBS=$(srcdir)/riscv-dejagnu && \
+	export DEJAGNULIBS=$(srcdir)/arc-dejagnu && \
 	cd build-gcc-newlib && \
-	$(MAKE) check-gcc "RUNTESTFLAGS=--target_board=riscv-sim"
+	$(MAKE) check-gcc "RUNTESTFLAGS=--target_board=arc-sim"
 
 check-gcc-linux: stamps/build-gcc-linux-stage2
 	export PATH=$(srcdir)/scripts/wrapper/qemu:$(INSTALL_DIR)/bin:$(PATH) && \
-	export DEJAGNULIBS=$(srcdir)/riscv-dejagnu && \
-	export RISC_V_SYSROOT=$(SYSROOT) && \
+	export DEJAGNULIBS=$(srcdir)/arc-dejagnu && \
+	export ARC_SYSROOT=$(SYSROOT) && \
 	cd build-gcc-linux-stage2 && \
-	$(MAKE) check-gcc "RUNTESTFLAGS=--target_board=riscv-sim"
+	$(MAKE) check-gcc "RUNTESTFLAGS=--target_board=arc-sim"
+
 
 clean:
 	rm -rf build-* $(addprefix src/,$(PACKAGES)) stamps
